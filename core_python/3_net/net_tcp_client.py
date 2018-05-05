@@ -13,7 +13,7 @@ while True:
     msg = input("msg> ")
     if msg == "exit":
         break
-    tcpSock.send(msg.encode('utf-8'))
+    tcpSock.send(msg.encode('utf-8'))    
     recv = tcpSock.recv(BUFSIZ).decode('utf-8')
     print(recv)
 tcpSock.close()
