@@ -12,7 +12,7 @@ class Solution:
         
         li = []
         for i in range(numRows):
-            print(range(numRows))
+            # print(range(numRows))
             i = i + 1
             new_li = []
             if (i == 1) or (i == numRows):
@@ -29,7 +29,7 @@ class Solution:
                     head = j
                     tail = head + 2* numRows - 2
                     middle = 2 * (numRows-i)+ j
-                    print('head:', head, 'middle:', middle, "tail:", tail, 'i:', i-1, 'length:', len(s))
+                    # print('head:', head, 'middle:', middle, "tail:", tail, 'i:', i-1, 'length:', len(s))
                     if middle <= len(s)-1:
                         print('add')
                         new_li.append(s[middle])
@@ -37,7 +37,7 @@ class Solution:
                             new_li.append(s[tail])
                     j = tail
             li.append(new_li)
-        print(li)
+        # print(li)
         return ''.join([n for n in [''.join(m) for m in li]])
 
 #
@@ -63,8 +63,8 @@ class Solution:
 #             index += step
 
 #         return ''.join(L)
-#
+
 
 
 sol = Solution()
-sol.convert("a", 4)
+print(sol.convert("a", 3))
