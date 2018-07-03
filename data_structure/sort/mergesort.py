@@ -35,6 +35,7 @@ def mergesort(l):
         return l
     middle = len(l) // 2
     return merge(mergesort(l[:middle]),mergesort(l[middle:]))
+    
 @timeit
 def main():
     print(mergesort([9,8,7,6,5,4,3,2,1]))
