@@ -1,3 +1,4 @@
+"""
 def step():
     a = 0
     while True:
@@ -7,10 +8,10 @@ def step():
         a = yield a
 
 """
-使用yield from改进生成器
-yield from语法
-1.  让嵌套生成器不必通过循环迭代yield，而是直接yield from
-2.  在子生成器与原生成器的调用者之间打开双向通道，两者可以直接通信
+# 使用yield from改进生成器
+# yield from语法
+# 1.  让嵌套生成器不必通过循环迭代yield，而是直接yield from
+# 2.  在子生成器与原生成器的调用者之间打开双向通道，两者可以直接通信
 """
 
 ############################################################
@@ -42,3 +43,29 @@ def main():
     retval = g.send(1)      # 看似向生成器gen()发送数据
     print(retval)       # 返回2
     g.throw(StopIteration)      # 看似向gen()抛入异常
+"""
+
+class Sub(object):
+
+    def __str__(self):
+        return 'sub'
+
+    def __init__(self, result=0):
+        print('init')
+        self.result = result
+
+    def __iter__(self):
+        print('yield')
+        yield self
+        print('return')
+        return self.result
+
+def run_it():
+    print('run')
+    s = Sub(1)
+    print(s)
+    a = yield from s
+
+if __name__ == "__main__":
+    print('start')
+    run_it()

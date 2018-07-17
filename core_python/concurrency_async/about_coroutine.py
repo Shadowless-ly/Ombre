@@ -29,7 +29,7 @@ import asyncio
 
 selectors = DefaultSelector()
 stopped= False
-urls_todo = [8,7,5,2,4,5,5,8,9,1,2,3,4,5,6,7,8,9]
+urls_todo = ['www.163.com']
 
 class Future:
     def __init__(self):
@@ -37,14 +37,15 @@ class Future:
         self._callbacks = []
 
     def add_done_callback(self, fn):
+        print('add call back')
         self._callbacks.append(fn)
 
     def set_result(self, result):
+        print('set result')
         self.result = result
         for fn in self._callbacks:
             fn(self)
 
-import socket
 class Crawler:
     def __init__(self, url):
         self.url = url
@@ -56,7 +57,7 @@ class Crawler:
         sock.setblocking(False)
         try:
             # 非阻塞方式创建连接
-            sock.connect(('172.16.19.144', 80))
+            sock.connect((url, 80))
         except BlockingIOError:
             pass
         # 创建Future对象
@@ -71,7 +72,7 @@ class Crawler:
         yield f
         # 获得执行权，取消注册
         selectors.unregister(sock.fileno())
-        get = 'GET {0} HTTP/1.0\r\nHost: 172.16.19.144\r\n\r\n'.format(self.url)
+        get = 'GET {0} HTTP/1.0\r\nHost: www.163.com\r\n\r\n'.format(self.url)
         # 将数据发送到内核缓冲区
         sock.send(get.encode('utf-8'))
         # 声明全局变量stopped状态，用于确认是否完成全部任务
@@ -107,7 +108,8 @@ class Task:
         except StopAsyncIteration:
             return
         next_future.add_done_callback(self.step)
-
+        print(next_future._callbacks)
+                 
 """
 上述代码中，Task封装了coro对象，即初始化传递给他的对象，被管理的任务是待执行的协程
 这里的coro就是fetch()生成器，还有一个step方法，在初始化的时候就会执行一遍，step()内
@@ -121,48 +123,57 @@ def loop():
             callback = event_key.data
             callback()
 
+"""
+整体流程：
+1. 在要执行异步IO时创建Furture对象。
+2. 监控sock.fb的可读写状态，注册selector回调（将结果保存于Future对象的result中）。
+3. yield Future对象。
+3. 在step中取得Future对象，注册设置Future set_result时的回调函数。
+4. 事件循环，直到sock.fb状态满足。
+5. 触发selector回调，设置Future的result值。
+6. 设置值后触发Future回调，进入Step，将Future的值send到协程，继续运行协程，直到再次yield
+"""
 if __name__ == "__main__":
     for url in urls_todo:
         crawler = Crawler(url)
         Task(crawler.fetch())
     loop()
 
-
 """
 重构代码
 抽象socket连接功能
 """
-def connect(sock, address):
-    f = Future()
-    sock.setblocking(False)
-    try:
-        sock.connect(address)
-    except BlockingIOError:
-        pass
+# def connect(sock, address):
+#     f = Future()
+#     sock.setblocking(False)
+#     try:
+#         sock.connect(address)
+#     except BlockingIOError:
+#         pass
     
-    def on_connected():
-        f.set_result(None)
+#     def on_connected():
+#         f.set_result(None)
 
-    selectors.register(sock.fileno(), EVENT_WRITE, on_connected)
-    yield from f
-    selectors.unregister(sock.fileno())
+#     selectors.register(sock.fileno(), EVENT_WRITE, on_connected)
+#     yield from f
+#     selectors.unregister(sock.fileno())
 
-def read(sock):
-    f = Future()
+# def read(sock):
+#     f = Future()
 
-    def on_readable():
-        f.set_result(sock.recv(4096))
+#     def on_readable():
+#         f.set_result(sock.recv(4096))
 
-    selectors.register(sock.fileno(), EVENT_READ, on_readable)
-    chunk = yield from f
-    selectors.unregister(sock.fileno())
-    return chunk
+#     selectors.register(sock.fileno(), EVENT_READ, on_readable)
+#     chunk = yield from f
+#     selectors.unregister(sock.fileno())
+#     return chunk
 
-def read_all(sock):
-    response = []
-    chunk = yield from read(sock)
-    while chunk:
-        response.append(chunk)
-        chunk = yield from read(sock)
-    return b''.join(response)
+# def read_all(sock):
+#     response = []
+#     chunk = yield from read(sock)
+#     while chunk:
+#         response.append(chunk)
+#         chunk = yield from read(sock)
+#     return b''.join(response)
 
