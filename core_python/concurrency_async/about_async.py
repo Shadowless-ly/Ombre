@@ -129,7 +129,7 @@ def blocking_way():
 # 单线程同步方式
 def sync_way():
     res = []
-    for i in range(100):
+    for _ in range(100):
         res.append(blocking_way())
     return len(res)
 
@@ -189,7 +189,7 @@ def noblocking_way():
 
 def async_way():
     res = []
-    for i in range(100):
+    for _ in range(100):
         res.append(noblocking_way())
     return len(res)
 
