@@ -45,6 +45,9 @@ class Future:
         self.result = result
         for fn in self._callbacks:
             fn(self)
+    
+    def __iter__(self):
+        yield self
 
 class Crawler:
     def __init__(self, url):
@@ -109,7 +112,7 @@ class Task:
             return
         next_future.add_done_callback(self.step)
         print(next_future._callbacks)
-                 
+      
 """
 上述代码中，Task封装了coro对象，即初始化传递给他的对象，被管理的任务是待执行的协程
 这里的coro就是fetch()生成器，还有一个step方法，在初始化的时候就会执行一遍，step()内
@@ -143,37 +146,63 @@ if __name__ == "__main__":
 重构代码
 抽象socket连接功能
 """
-# def connect(sock, address):
-#     f = Future()
-#     sock.setblocking(False)
-#     try:
-#         sock.connect(address)
-#     except BlockingIOError:
-#         pass
+def connect(sock, address):
+    f = Future()
+    sock.setblocking(False)
+    try:
+        sock.connect(address)
+    except BlockingIOError:
+        pass
     
-#     def on_connected():
-#         f.set_result(None)
+    def on_connected():
+        f.set_result(None)
 
-#     selectors.register(sock.fileno(), EVENT_WRITE, on_connected)
-#     yield from f
-#     selectors.unregister(sock.fileno())
+    selectors.register(sock.fileno(), EVENT_WRITE, on_connected)
+    yield from f
+    selectors.unregister(sock.fileno())
 
-# def read(sock):
-#     f = Future()
+def read(sock):
+    f = Future()
 
-#     def on_readable():
-#         f.set_result(sock.recv(4096))
+    def on_readable():
+        f.set_result(sock.recv(4096))
 
-#     selectors.register(sock.fileno(), EVENT_READ, on_readable)
-#     chunk = yield from f
-#     selectors.unregister(sock.fileno())
-#     return chunk
+    selectors.register(sock.fileno(), EVENT_READ, on_readable)
+    chunk = yield from f
+    selectors.unregister(sock.fileno())
+    return chunk
 
-# def read_all(sock):
-#     response = []
-#     chunk = yield from read(sock)
-#     while chunk:
-#         response.append(chunk)
-#         chunk = yield from read(sock)
-#     return b''.join(response)
+def read_all(sock):
+    response = []
+    chunk = yield from read(sock)
+    while chunk:
+        response.append(chunk)
+        chunk = yield from read(sock)
+    return b''.join(response)
 
+class Crawler:
+    def __init__(self, url):
+        self.url = url
+        self.response = b''
+    
+    def fetch(self):
+        global stopped
+        sock = socket.socket()
+        yield from connect(sock, ('example.com', 80))
+        get = 'GET {0} HTTP/1.0\r\nHost: example.com\r\n\r\n'
+        sock.send(get.encode('utf-8'))
+        self.response = yield from read_all(sock)
+        urls_todo.remove(self.url)
+        if not urls_todo:
+            stopped = True
+
+"""
+asyncio介绍
+在Python3.4引入，提供了基于协程做异步I/O编写单线程并发代码的基础设施。
+在Python3.6正式成为标准库，其核心组件包括事件循环(Event Loop),协程(Coroutine)
+、任务(Task)、未来对象(Future)以及其他一些扩充和辅助性质的模块。
+在引入asyncio时，提供了@asyncio.coroutine用于装饰使用了yield from的函数，
+以标记其为协程，但是不强制使用这么装饰器。
+但因为yield和yield from语法存在误导，在Python3.5中新增了async/await语法
+
+"""
