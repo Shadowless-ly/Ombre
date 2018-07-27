@@ -42,6 +42,8 @@ class SQL(object):
         self.if_closed = True
     
     async def get_sql(self, create_pool=True):
+        """取得一个sql实例，create_pool为True表示取得的sql会保证pool已创建
+        """
         if create_pool:
             if self.if_closed:
                 logging.info(str((self.host, self.db)) +'pool is colsed, no restart it')
@@ -60,7 +62,7 @@ class SQL(object):
         logging.info(str((self.host, self.db)) +"create pool")
 
     async def execute(self, sql, args, cursor_type=None, size=None):
-        """建立建立连接,执行sql语句，返回执行结果
+        """建立建立连接,执行sql语句，返回执行结果,cursor_type指定cursor的类型,size指定接收的数据量(bytes)
         """
         async with self.pool.acquire() as conn:
             self.cursor = await conn.cursor(cursor_type)
@@ -95,14 +97,16 @@ class SQLTest(unittest.TestCase):
             True
             >>> id(sql) == id(sql2) != id(sql3)
             """
-            sql = SQL('127.0.0.1', loop)
+            sql = SQL('172.16.73.11', loop)
             await sql.create_pool()
             await sql.execute('SELECT ?;', '88')
             await sql.execute('show databases;', '')
             await sql.close()
-            sql2 = SQL('127.0.0.1', loop)
-            sql3 = SQL('127.0.0.1', loop, db='mysql')
+            sql2 = SQL('172.16.73.11', loop)
+            sql3 = SQL('172.16.73.11', loop, db='mysql')
             print('test_sql1:', id(sql), id(sql2), id(sql))
+            await sql2.close()
+            await sql3.close()
 
 
         async def test_sql2(loop):
@@ -110,11 +114,12 @@ class SQLTest(unittest.TestCase):
             >>> asyncio.iscoroutinefunction(test_sql2)
             True
             """
-            sql = SQL('127.0.0.1', loop, db="mysql")
+            sql = SQL('172.16.73.11', loop, db="mysql")
             await sql.get_sql()
             await sql.execute('select * from user;', '', cursor_type=aiomysql.DictCursor)
             await sql.execute('show tables;', '')
             print('test_sql2', id(sql))
+            await sql.close()
 
         loop = asyncio.get_event_loop()
         # print(asyncio.iscoroutinefunction(test_sql1))
