@@ -65,7 +65,10 @@ def run_it():
     s = Sub(1)
     print(s)
     a = yield from s
+    print(a)
 
 if __name__ == "__main__":
     print('start')
-    run_it()
+    r = run_it()
+    next(r)
+    next(r)
