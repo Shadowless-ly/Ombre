@@ -1,7 +1,15 @@
+"""该模块实现了SQL类，用于维护mysql连接池以及异步执行sql语句，
+SQL为每一个连接对象(host,db)保存其实例，在后续调用时复用已建立的连接池：
+sql = SQL('127.0.0.1', loop, db="eureka")  # 创建/获取连接池
+await sql.get_sql() # 确保连接池打开
+await sql.select('select * from user;', '', cursor_type=aiomysql.DictCursor) # 执行sql语句
+await sql.execute('create database test;')
+await sql.close() # 关闭连接池
+"""
 import aiomysql
 import asyncio
 # import configparser
-import logging;logging.basicConfig(level=logging.DEBUG)
+import logging;logging.basicConfig(level=logging.INFO)
 import doctest
 import unittest
 
@@ -46,12 +54,12 @@ class SQL(object):
         """
         if create_pool:
             if self.if_closed:
-                logging.info(str((self.host, self.db)) +'pool is colsed, no restart it')
-                await self.create_pool()
+                logging.info(str((self.host, self.db)) +'pool is colsed, now restart it')
+                await self._create_pool()
         logging.info(str((self.host, self.db)) +'get sql')
         return self.instance
 
-    async def create_pool(self):
+    async def _create_pool(self):
         """创建连接池
         """
         self.pool = await aiomysql.create_pool(host=self.host, port=self.port, 
@@ -65,16 +73,23 @@ class SQL(object):
         """建立建立连接,执行sql语句，返回执行结果,cursor_type指定cursor的类型,size指定接收的数据量(bytes)
         """
         async with self.pool.acquire() as conn:
-            self.cursor = await conn.cursor(cursor_type)
-            await self.cursor.execute(sql.replace('?', '%s'), args or ())
-            if size:
-                result = await self.cursor.fetchmany(size)
-            else:
-                result = await self.cursor.fetchall()
-            await self.cursor.close()
+            async with conn.cursor(cursor_type) as cursor:
+                await cursor.execute(sql.replace('?', '%s'), args or ())
+                affected = cursor.rowcount
+                logging.info('affected' + str(affected))
+        return affected
+
+    async def select(self, sql, args, cursor_type=None, size=None):
+        async with self.pool.acquire() as conn:
+            async with conn.cursor(cursor_type) as cursor:
+                await cursor.execute(sql.replace('?', '%s'), args or ())
+                if size:
+                    result = await cursor.fetchmany(size)
+                else:
+                    result = await cursor.fetchall()
             logging.info(str((self.host, self.db)) + 'row return: %s' % len(result))
             logging.debug(str((self.host, self.db)) + str(result))
-            return result
+        return result
 
     async def close(self):
         """关闭连接池
@@ -82,7 +97,13 @@ class SQL(object):
         self.pool.close()
         await self.pool.wait_closed()
         logging.info(str((self.host, self.db)) +'close pool')
-
+    
+    async def close_all(self):
+        """关闭所有链接池
+        """
+        for sql in self.instance:
+            sql.pool.close()
+            await sql.pool.wait_closed()
 
 class SQLTest(unittest.TestCase):
     @classmethod
@@ -97,16 +118,15 @@ class SQLTest(unittest.TestCase):
             True
             >>> id(sql) == id(sql2) != id(sql3)
             """
-            sql = SQL('172.16.73.11', loop)
-            await sql.create_pool()
-            await sql.execute('SELECT ?;', '88')
-            await sql.execute('show databases;', '')
-            await sql.close()
-            sql2 = SQL('172.16.73.11', loop)
-            sql3 = SQL('172.16.73.11', loop, db='mysql')
-            print('test_sql1:', id(sql), id(sql2), id(sql))
-            await sql2.close()
-            await sql3.close()
+            sql = SQL('127.0.0.1', loop)
+            await sql.get_sql()
+            await sql.select('SELECT ?;', '88')
+            await sql.select('show databases;', '')
+            sql2 = SQL('127.0.0.1', loop)
+            sql3 = SQL('127.0.0.1', loop, db='mysql')
+            print('test_sql1:', sql, sql2, sql3)
+            # await sql2.close()
+            # await sql3.close()
 
 
         async def test_sql2(loop):
@@ -114,12 +134,12 @@ class SQLTest(unittest.TestCase):
             >>> asyncio.iscoroutinefunction(test_sql2)
             True
             """
-            sql = SQL('172.16.73.11', loop, db="mysql")
+            sql = SQL('127.0.0.1', loop, db="eureka")
             await sql.get_sql()
-            await sql.execute('select * from user;', '', cursor_type=aiomysql.DictCursor)
-            await sql.execute('show tables;', '')
+            await sql.select('select * from user;', '', cursor_type=aiomysql.DictCursor)
+            await sql.select('show tables;', '')
             print('test_sql2', id(sql))
-            await sql.close()
+            # await sql.close()
 
         loop = asyncio.get_event_loop()
         # print(asyncio.iscoroutinefunction(test_sql1))
@@ -127,6 +147,7 @@ class SQLTest(unittest.TestCase):
         loop.run_until_complete(asyncio.gather(*furures))
         print('<'+'-'*50 +'>')
         print(SQL.instance)
+        sql = SQL('127.0.0.1', loop)
 
     @classmethod
     def tearDownClass(cls):

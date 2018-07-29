@@ -196,13 +196,3 @@ class Crawler:
         if not urls_todo:
             stopped = True
 
-"""
-asyncio介绍
-在Python3.4引入，提供了基于协程做异步I/O编写单线程并发代码的基础设施。
-在Python3.6正式成为标准库，其核心组件包括事件循环(Event Loop),协程(Coroutine)
-、任务(Task)、未来对象(Future)以及其他一些扩充和辅助性质的模块。
-在引入asyncio时，提供了@asyncio.coroutine用于装饰使用了yield from的函数，
-以标记其为协程，但是不强制使用这么装饰器。
-但因为yield和yield from语法存在误导，在Python3.5中新增了async/await语法
-
-"""
