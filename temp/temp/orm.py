@@ -7,6 +7,11 @@ DB = 'eureka'
 
 class Model(dict, metaclass=ModelMetaclass):
     """ORM映射的基类
+
+    继承该类可以创建Table类,Table类代表数据库中的一张表,
+    每一个实例表示数据库表中的行。
+    该类继承了字典类,实现了以属性的方式方位字典的键值。
+    实现了对数据库表的增删改查。
     """
     def __init__(self, **kw):
         """以字典方式初始化kw参数
@@ -45,7 +50,7 @@ class Model(dict, metaclass=ModelMetaclass):
 
     @classmethod
     async def find(cls, pk):
-        """find object by primary key.'
+        """使用主键查询数据库表
         """
         await cls.__sql__.get_sql()
         rs = await cls.__sql__.select('%s where `%s`=?' %(cls.__select__, cls.__primary_key__), [pk], 1)
@@ -53,13 +58,65 @@ class Model(dict, metaclass=ModelMetaclass):
             return None
         return cls(**rs[0])
 
+    @classmethod
+    async def findNumber(cls, selectField, where=None, args=None):
+        sql = ['select %s _num_ from `%s`' % (selectField, cls.__table__)]
+        if where:
+            sql.append('where')
+            sql.append(where)
+        rs = await cls.__sql__.select(' '.join(sql), args, 1)
+        if len(rs) == 0:
+            return None
+        return rs[0]['__num__']
+
+    @classmethod
+    async def findall(cls, where=None, args=None, **kw):
+        sql = [cls.__select__]
+        if where:
+            sql.append('where')
+            sql.append(where)
+        if args is None:
+            args = []
+        orderBy = kw.get('orderBy', None)
+        if orderBy:
+            sql.append('order by')
+            sql.append(orderBy)
+        limit = kw.get('limit', None)
+        if limit is not None:
+            sql.append('limit')
+            if isinstance(limit, int):
+                sql.append('?')
+                args.append(limit)
+            elif isinstance(limit, tuple) and len(limit) == 2:
+                sql.append('?', '?')
+                args.extend(limit)
+            else:
+                raise ValueError('Invalid limit value: %s' % str(limit))
+        rs = await cls.__sql__.select(' '.join(sql), args)
+        return [cls(**r) for r in rs]
+
     async def save(self):
+        """将数据插入到数据库表中
+        """
         args = list(map(self.getValueOrDefault, self.__fields__))
         args.append(self.getValueOrDefault(self.__primary_key__))
         rows = await self.__sql__.execute(self.__insert__, args)
         if rows != 1:
             logging.warning('failed to insert record: affected rows: %s' % rows)
         
+    async def update(self):
+        args = list(map(self.getValue, self.__fields__))
+        args.append(self.getValue(self.__primary_key__))
+        rows = await self.__sql__.execute(self.__update__, args)
+        if rows != 1:
+            logging.warning('failed to update by primary key: affected rows: %s ' %rows)
+
+    async def remove(self):
+        args = [self.getValue(self.__primary_key__)]
+        rows = await self.__sql__.execute(self.__delete__, args)
+        if rows != 1:
+            logging.warning('failed to remove by primary key: affected row: %s' % rows)
+
 
 class Field(object):
     """字段类的基类
@@ -80,27 +137,37 @@ class StringField(Field):
         super(StringField, self).__init__(name, ddl, primary_key, default)
 
 class BooleanField(Field):
-
+    """布尔字段类型
+    """
     def __init__(self, name=None, default=False):
         super().__init__(name, 'boolean', False, default)
 
 class IntegerField(Field):
-
+    """整型字段
+    """
     def __init__(self, name=None, primary_key=False, default=0):
         super().__init__(name, 'bigint', primary_key, default)
 
 class FloatField(Field):
-
+    """浮点字段
+    """
     def __init__(self, name=None, primary_key=False, default=0.0):
         super().__init__(name, 'real', primary_key, default)
 
 class TextField(Field):
-
+    """文本字段
+    """
     def __init__(self, name=None, default=None):
         super().__init__(name, 'text', False, default)
 
 class ModelMetaclass(type):
-    
+    """mode元类
+
+    为Model类的元类,控制Mode子类型(table)的创建,
+    将其子类型的类属性中,Field类型保存于__mapings__中,
+    Field类型若其属性primary_key为True则保存于__primary_key__中,
+    为每个表增加增删改查类属性
+    """
     def __new__(cls, name, bases, attrs):
         if name == 'Model':
             return type.__new__(cls, name, bases, attrs)
