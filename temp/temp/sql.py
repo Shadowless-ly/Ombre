@@ -36,7 +36,7 @@ class SQL(object):
         # return cls.instance
 
     def __init__(self, host, loop,
-                port=3306, user='root', 
+                port=3306, user='root', autocommit=True, 
                 password='ly2951108', db='eureka'):
         """
         设置数据库初始化信息
@@ -47,6 +47,7 @@ class SQL(object):
         self.passwd = password
         self.db = db
         self.loop = loop
+        self.autocommit = True
         self.if_closed = True
     
     async def get_sql(self, create_pool=True):
@@ -56,7 +57,7 @@ class SQL(object):
             if self.if_closed:
                 logging.info(str((self.host, self.db)) +'pool is colsed, now restart it')
                 await self._create_pool()
-        logging.info(str((self.host, self.db)) +'get sql')
+        logging.debug(str((self.host, self.db)) +'get sql')
         return self.instance
 
     async def _create_pool(self):
@@ -64,22 +65,24 @@ class SQL(object):
         """
         self.pool = await aiomysql.create_pool(host=self.host, port=self.port, 
                                                 user=self.user, password=self.passwd,
-                                                db=self.db, loop=self.loop
+                                                db=self.db, loop=self.loop, autocommit=self.autocommit
                                                 )
-        self.if_closed = False
-        logging.info(str((self.host, self.db)) +"create pool")
 
-    async def execute(self, sql, args, cursor_type=None, size=None):
+        self.if_closed = False
+        logging.debug(str((self.host, self.db)) +"create pool")
+
+    async def execute(self, sql, args, cursor_type=aiomysql.DictCursor, size=None):
         """建立建立连接,执行sql语句，返回执行结果,cursor_type指定cursor的类型,size指定接收的数据量(bytes)
         """
         async with self.pool.acquire() as conn:
             async with conn.cursor(cursor_type) as cursor:
+                logging.info(str(sql.replace('?', '%s'))  + ' args: ' + str(args))
                 await cursor.execute(sql.replace('?', '%s'), args or ())
                 affected = cursor.rowcount
-                logging.info('affected' + str(affected))
+                logging.info('affected ' + str(affected))
         return affected
 
-    async def select(self, sql, args, cursor_type=None, size=None):
+    async def select(self, sql, args, cursor_type=aiomysql.DictCursor, size=None):
         async with self.pool.acquire() as conn:
             async with conn.cursor(cursor_type) as cursor:
                 await cursor.execute(sql.replace('?', '%s'), args or ())
