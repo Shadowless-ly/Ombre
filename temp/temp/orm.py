@@ -96,7 +96,7 @@ class Model(dict, metaclass=ModelMetaclass):
     async def find(cls, pk):
         """使用主键查询数据库表
         """
-        await cls.__sql__.get_sql()
+        await cls.__sql__.ensure_pool()
         rs = await cls.__sql__.select('%s where `%s`=?' %(cls.__select__, cls.__primary_key__), [pk], 1)
         if len(rs) == 0:
             return None
@@ -104,7 +104,7 @@ class Model(dict, metaclass=ModelMetaclass):
 
     @classmethod
     async def findNumber(cls, selectField, where=None, args=None):
-        await cls.__sql__.get_sql()
+        await cls.__sql__.ensure_pool()
         sql = ['select %s _num_ from `%s`' % (selectField, cls.__table__)]
         if where:
             sql.append('where')
@@ -116,7 +116,7 @@ class Model(dict, metaclass=ModelMetaclass):
 
     @classmethod
     async def findall(cls, where=None, args=None, **kw):
-        await cls.__sql__.get_sql()
+        await cls.__sql__.ensure_pool()
         sql = [cls.__select__]
         if where:
             sql.append('where')
@@ -145,7 +145,7 @@ class Model(dict, metaclass=ModelMetaclass):
     async def save(self):
         """将数据插入到数据库表中
         """
-        await self.__sql__.get_sql()
+        await self.__sql__.ensure_pool()
         args = list(map(self.getValueOrDefault, self.__fields__))
         args.append(self.getValueOrDefault(self.__primary_key__))
         rows = await self.__sql__.execute(self.__insert__, args)
@@ -153,7 +153,7 @@ class Model(dict, metaclass=ModelMetaclass):
             logging.warning('failed to insert record: affected rows: %s' % rows)
         
     async def update(self):
-        await self.__sql__.get_sql()
+        await self.__sql__.ensure_pool()
         args = list(map(self.getValue, self.__fields__))
         args.append(self.getValue(self.__primary_key__))
         rows = await self.__sql__.execute(self.__update__, args)
@@ -161,7 +161,7 @@ class Model(dict, metaclass=ModelMetaclass):
             logging.warning('failed to update by primary key: affected rows: %s ' %rows)
 
     async def remove(self):
-        await self.__sql__.get_sql()
+        await self.__sql__.ensure_pool()
         args = [self.getValue(self.__primary_key__)]
         rows = await self.__sql__.execute(self.__delete__, args)
         if rows != 1:

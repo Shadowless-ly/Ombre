@@ -88,7 +88,7 @@ class Plate(Model):
     manager_role_id = IntegerField(name='manager_role_id')
 
 
-async def main(loop):
+async def main():
     # user = User(name='shadowless', password='111111', role_id=9, mail='ly9413ly@163.com')
     # await user.save()
     # role = Role(id=9, name='administrator', enable=True)
@@ -99,14 +99,24 @@ async def main(loop):
     # await plate.save()
     # await post.save()
     # await comment.save()
+    
+    await User.__sql__.ensure_pool()
     print(await User.findall())
     print(await Role.findall())
     print(await Plate.findall())
     print(await Post.findall())
     print(await Comment.findall())
     
-    await User.__sql__.close()
+    await User.__sql__.close_all()
 
 if __name__ == '__main__':
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(main(loop))
+    s = time.time()
+    for i in range(100):
+        print('closed', User.__sql__.if_closed)
+        loop = asyncio.get_event_loop()
+        loop.run_until_complete(main())
+
+    loop.run_until_complete(User.__sql__.close_all())
+    
+        # time.sleep(0.1)
+    print('stop at: %s' %(time.time() - s))

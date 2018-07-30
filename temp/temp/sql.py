@@ -1,7 +1,7 @@
 """该模块实现了SQL类，用于维护mysql连接池以及异步执行sql语句，
 SQL为每一个连接对象(host,db)保存其实例，在后续调用时复用已建立的连接池：
 sql = SQL('127.0.0.1', loop, db="eureka")  # 创建/获取连接池
-await sql.get_sql() # 确保连接池打开
+await sql.ensure_pool() # 确保连接池打开
 await sql.select('select * from user;', '', cursor_type=aiomysql.DictCursor) # 执行sql语句
 await sql.execute('create database test;')
 await sql.close() # 关闭连接池
@@ -50,15 +50,15 @@ class SQL(object):
         self.autocommit = True
         self.if_closed = True
     
-    async def get_sql(self, create_pool=True):
+    async def ensure_pool(self, create_pool=True):
         """取得一个sql实例，create_pool为True表示取得的sql会保证pool已创建
         """
         if create_pool:
             if self.if_closed:
-                logging.info(str((self.host, self.db)) +'pool is colsed, now restart it')
+                logging.info(str((self.host, self.db)) +'pool is closed, now restart it')
                 await self._create_pool()
         logging.debug(str((self.host, self.db)) +'get sql')
-        return self.instance
+        # return self.instance
 
     async def _create_pool(self):
         """创建连接池
@@ -99,14 +99,17 @@ class SQL(object):
         """
         self.pool.close()
         await self.pool.wait_closed()
-        logging.info(str((self.host, self.db)) +'close pool')
+        self.if_closed=True
+        logging.info(str((self.host, self.db)) +' close pool')
     
     async def close_all(self):
         """关闭所有链接池
         """
-        for sql in self.instance:
+        for key, sql in self.instance.items():
             sql.pool.close()
             await sql.pool.wait_closed()
+            sql.if_closed=True
+            logging.info(str(key) +' close pool')
 
 class SQLTest(unittest.TestCase):
     @classmethod
@@ -122,7 +125,7 @@ class SQLTest(unittest.TestCase):
             >>> id(sql) == id(sql2) != id(sql3)
             """
             sql = SQL('127.0.0.1', loop)
-            await sql.get_sql()
+            await sql.ensure_pool()
             await sql.select('SELECT ?;', '88')
             await sql.select('show databases;', '')
             sql2 = SQL('127.0.0.1', loop)
@@ -138,7 +141,7 @@ class SQLTest(unittest.TestCase):
             True
             """
             sql = SQL('127.0.0.1', loop, db="eureka")
-            await sql.get_sql()
+            await sql.ensure_pool()
             await sql.select('select * from user;', '', cursor_type=aiomysql.DictCursor)
             await sql.select('show tables;', '')
             print('test_sql2', id(sql))
