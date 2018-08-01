@@ -54,10 +54,7 @@ iptables中有如下表：
 |  raw   | 决定数据包是否被状态跟踪机制处理。对应内核模块：iptable_raw  |               OUTPUT，PREROUTING                |
 
 规则表的优先顺序：
-
 **raw ---> mangle ---> nat ---> filter**
-
-
 
 ### 表与链的关系
 
@@ -105,8 +102,6 @@ iptable --line -t filter -nvxL INPUT
 
 ```
 
-
-
 ### 规则管理
 
 iptables常用的匹配条件：`源地址`、`目标地址`、`源端口`、`目标端口`
@@ -152,9 +147,90 @@ iptables-save > /etc/sysconfig/iptables
 iptables-restore < /etc/sysconfig/iptables
 ```
 
+### 匹配条件
+
+```shell
+iptables -t filter -I INPUT -s 1.1.1.1,1.1.1.2 -j DROP
+iptables -t filter -I INPUT -s 1.1.1.0/24 -j ACCEPT
+iptables -t filter -I INPUT ! -s 1.1.1.0/24 -j ACCEPT
+# -s用于匹配源地址，可以指定对个源地址，网段，取反
+
+iptables -t filter -I OUTPUT -d 1.1.1.1,1.1.1.2 -j DROP
+iptables -t filter -I INPUT -d 1.1.1.0/24 -j ACCEPT
+iptables -t filter -I INPUT ! -d 1.1.1.0/24 -j ACCEPT
+# -d用于匹配报文的目标地址，可以同时指定多个目标地址，网段，取反
 
 
+iptables -t filter -I INPUT -p tcp -s 1.1.1.1 -j ACCEPT
+iptables -t filter -I INPUT !-p udp -s 1.1.1.1 -j ACCEPT
+# -p用于匹配报文的协议类型，支持的类型有:tcp、udp、udplite、icmp、esp、ah、sctp、icmpv6、mh
+
+iptables -t filter -I INPUT -p icmp -i eth4 -j DROP
+iptables -t filter -I INPUT -p icmp ! -i eth4 -j DROP
+# -i用于匹配从那个网卡流入本机，只使用在INPUT，FORWARD、PREROUTING链
+
+iptables -t filter -I OUTPUT -p icmp -o eth4 -j DROP
+iptables -t filter -I OUTPUT -p icmp ! -o eth4 -j DROP
+# -o参数用于匹配从哪个网卡流出本机，只使用在OUTPUT、FORWARD、POSTROUTING链
+```
+
+### 常用拓展模块
+
+```shell
+iptables -t filter -I OUTPUT -d 1.1.1.1 -p tcp -m tcp --sport 22 -j REJECT
+iptables -t filter -I INPUT -s 192.168.1.146 -p tcp -m tcp --dport 22:25 -j REJECT
+iptables -t filter -I INPUT -s 1.1.1.1 -p tcp -m tcp --dport :22 -j REJECT
+iiptables -t filter -I INPUT -s 1.1.1.1 -p tcp -m tcp ! --dport 22 -j REJECT
+# -p用于制定匹配的协议 -m为匹配的附加模块， --dport、--sport为附加模块tcp的功能，用于匹配端口号
+
+iptables -t filter -I OUTPUT -d 1.1.1.1 -p udp -m multiport --sport 137,138 -j ACCEPT
+iptables -t ffiler -I INPUT -d 80:90,8080,8088 -p tcp -j ACCEPT
+# -m multiport模块用于制定对个离散的端口，多个端口使用逗号隔开
+
+iptables -t filter -I INPUT -m iprange --src-range 1.1.1.1-1.1.1.15 -j DROP
+iptables -t filter -I OUTPUT -m iprange --dst-range 1.1.1.1-1.1.1.15 -j DROP
+iptables -t filter -I INPUT -m iptange ! --src-range 1.1.1.1-1.1.1.15 -j DROP
+# iprange模块，指定范围连续的IP地址
+
+iptables -t filter -I INPUT -p tcp --sport 80 -m string --algo kmp --string "163" -j REJECT
+iptables -t filter -I INPUT -p tcp --sport 80 -m string --algo bm --string "baidu" -j REJECT
+# string模块，匹配字符，--algo制定匹配算法bm或kmp，指定需要匹配的字符串
 
 
+iptables -t filter -I OUTPUT -p tcp --dport 80 -m time --timestart 09:00:00 --timestop 19:00:00 -j REJECT
+iptables -t filter -I OUTPUT -p tcp --dport 443 -m time --timestart 09:00:00 --timestop 19:00:00 -j REJECT
+iptables -t filter -I OUTPUT -p tcp --dport 80  -m time --weekdays 6,7 -j REJECT
+iptables -t filter -I OUTPUT -p tcp --dport 80  -m time --monthdays 22,23 -j REJECT
+iptables -t filter -I OUTPUT -p tcp --dport 80  -m time ! --monthdays 22,23 -j REJECT
+iptables -t filter -I OUTPUT -p tcp --dport 80  -m time --timestart 09:00:00 --timestop 18:00:00 --weekdays 6,7 -j REJECT
+iptables -t filter -I OUTPUT -p tcp --dport 80  -m time --weekdays 5 --monthdays 22,23,24,25,26,27,28 -j REJECT
+iptables -t filter -I OUTPUT -p tcp --dport 80  -m time --datestart 2017-12-24 --datestop 2017-12-27 -j REJECT
+# time模块，用于匹配时间，--timestart：开始时间不可取反， --timestop:结束时间范围不可取反， --weekdays:星期可取反， --monthdays：日期可取反， --datestart:开始日期不可取反， --datestop：结束日期不可取反
 
+iptables -I INPUT -p tcp --dport 22 -m connlimit --connlimit-above 2 -j REJECT
+iptables -I INPUT -p tcp --dport 22 -m connlimit --connlimit-above 20 --connlimit-mask 24 -j REJECT
+iptables -I INPUT -p tcp --dport 22 -m connlimit --connlimit-above 10 --connlimit-mask 27 -j REJECT
+# 限制链接数，--connlimit-above:限制单个ip链接数量， --connlimit-mask:不可单独使用，配合前一选项限制某一网段
 
+iptables -t filter -I INPUT -p icmp -m limit --limit-burst 3 --limit 10/minute ACCEPT
+iptables -t filter -A INPUT -p icmp -j REJECT
+# limit模块，--limit-burst:令牌桶，令牌最大数，  --limit：令牌声场频率，支持second，minute，hour，day
+```
+
+### tcp拓展模块
+tcp模块提供了对tcp标识位的匹配
+```shell
+iptables -t filter -I OUTPUT -d 1.1.1.1 -p tcp -m tcp --sport 22 -j REJECT
+iptables -t filter -I INPUT -s 192.168.1.146 -p tcp -m tcp --dport 22:25 -j REJECT
+iptables -t filter -I INPUT -s 1.1.1.1 -p tcp -m tcp --dport :22 -j REJECT
+iiptables -t filter -I INPUT -s 1.1.1.1 -p tcp -m tcp ! --dport 22 -j REJECT
+# -p用于制定匹配的协议 -m为匹配的附加模块， --dport、--sport为附加模块tcp的功能，用于匹配端口号
+
+iptables -t filter -I INPUT -p tcp -m tcp --dport 22 --tcp-flags SYN,ACK,FIN,RST,URG,PSH SYN -j REJECT
+
+iptables -t filter -I OUTPUT -p tcp -m tcp --sport 22 --tcp-flags SYN,ACK,FIN,RST,URG,PSH -j REJECT
+
+iptables -t filter -I INPUT -p tcp -m tcp --dport 22 --tcp-flag ALL SYN -j REJECT
+iptables -t filter -I OUTPUT -p tcp -m tcp --sport 22 --tcp-flags ALL SYN,ACK -j REJECT
+# --tcp-flag用于匹配tcp头的标识位，SYN，ACL,FIN,RST,URG,PSH SYN 表示匹配前面所有标识位，且SYN位为1等效于iptables -t filter -I INPUT -p tcp --dport 22 --syn -j REJECT
+```
