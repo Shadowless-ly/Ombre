@@ -39,6 +39,8 @@ def Handler_decorator(path, *, method):
 #         return wrapper
 #     return decorator
 
+get = functools.partial(Handler_decorator, method='get')
+post = functools.partial(Handler_decorator, method='post')
 # 使用装饰器，直接将一个函数映射成为视图函数
 @get('/blog/{id}')
 def get_blog(id):
@@ -48,8 +50,6 @@ def get_blog(id):
 def api_comments(*, page='1'):
     pass
 
-get = functools.partial(Handler_decorator, method='get')
-post = functools.partial(Handler_decorator, method='post')
 
 ############处理request对象########
 # 视图函数需要request对象的信息才可以正确运行
@@ -133,10 +133,32 @@ class RequestHandler(object):
     RequestHandler是一个类，定义了__call__()方法，所以可以将其实例视为函数直接调用
     RequestHandler的目的时从URL函数中分析其需要接收的参数，从request中获取必要的参数
     调用URL函数然后把结果转换为web.Response对象，这样就完全符合aiohttp框架的要求
+    
+    request时经过aiohttp包装后的对象，其本质是一个HTTP请求。
+    由请求状态(status)、请求首部(header)、内容实体(body)三部分组成
+    我们需要的参数包含在内容实体以及请求状态URI中。
+    request对象封装了HTTP请求，可以通过request的属性调取值。
+    [aiohttp.web.Request](http://aiohttp.readthedocs.io/en/stable/web_reference.html#aiohttp.web.Request)
+    RequestHandler需要处理以下问题:
+    1.  确定HTTP请求的方法(POST or GET), 使用request.method获取
+    2.  根据HTTP请求的content_type字段，选用不同解析方法获取参数，使用request.content_type获取
+    3.  将获取的参数经过的处理，使其完全符合视图函数接受的参数形式
+    4.  调用视图函数
     """
     def __init__(self, app, fn):
         self._app = app
         self._func = fn
+        self._required_kw_args = get_required_kw_args(fn)
+        self._named_kw_args = get_named_kw_args(fn)
+        self._has_request_arg = has_request_arg(fn)
+        self._has_named_kw_arg = has_named_kw_args(fn)
+        self._has_var_kw_arg = has_var_kw_args(fn)
+    
+    # 1. 定义kw,用于保存参数
+    # 2. 判断视图函数是否存在关键字参数，如果存在根据POST或者GET方法将request请求内容保存到kw
+    # 3. 如果kw为空，说明request无请求内容，则将match_info列表里的资源映射给kw；若不为空则把命名关键字从参数内容给kw
+    # 4. 完善_has_request_arg和_required_kw_args属性
+
 
     async def __call__(self, request):
         pass
